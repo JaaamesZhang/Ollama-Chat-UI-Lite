@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Llama Chat</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f2f5f9;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    transition: background-color 0.5s ease-in-out;
+}
+
+#chat-box {
+    width: 93%;
+    height: calc(85% - 70px);
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    overflow-y: auto;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: box-shadow 0.3s ease, opacity 0.5s ease-in-out;
+    opacity: 0;
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+#chat-box:hover {
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+}
+
+.message {
+    padding: 8px;
+    border-radius: 15px;
+    max-width: 80%;
+    word-wrap: break-word;
+    opacity: 0;
+    transform: translateY(10px);
+    animation: messagePopUp 0.5s ease-out forwards;
+    position: relative;
+}
+
+.user-message {
+    background-color: #d1e7dd;
+    color: #0f5132;
+    margin-left: auto;
+    text-align: left;
+}
+
+.ai-message {
+    background-color: #cfe2ff;
+    color: #084298;
+    margin-right: auto;
+    text-align: left;
+}
+
+#user-input-container {
+    display: flex;
+    width: 100%;
+    max-width: 600px;
+    padding: 8px;
+    gap: 6px;
+    box-sizing: border-box;
+    transition: all 0.3s ease;
+}
+
+#user-input {
+    flex-grow: 1;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+#user-input:focus {
+    border-color: #007bff;
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.2);
+    outline: none;
+}
+
+button {
+    padding: 6px 10px;
+    border: none;
+    background-color: #007bff;
+    color: white;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.3s, transform 0.2s, box-shadow 0.3s;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+    opacity: 0;
+    animation: buttonFadeIn 0.5s ease-out forwards;
+}
+
+button:hover {
+    background-color: #0056b3;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+button:active {
+    transform: scale(0.98);
+}
+
+.copy-btn {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    padding: 2px 4px;
+    font-size: 8px;
+    background-color: #6c757d;
+    color: #fff;
+    border-radius: 3px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+    animation: buttonFadeIn 0.5s ease-out forwards;
+}
+
+.copy-btn:hover {
+    opacity: 1;
+}
+
+@keyframes fadeIn {
+    0% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+@keyframes messagePopUp {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes buttonFadeIn {
+    0% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+/* Loading Spinner */
+.loader {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 2s linear infinite;
+    margin: 10px auto;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+
+    </style>
+
+</head>
+<head>
+<body>
+    <div id="model-input-container">
+        <label for="model-input">Current Model:</label>
+        <input type="text" id="model-input" placeholder="Enter model name" onblur="setModelName()">
+    </div>
+
+    <div id="chat-box"></div>
+
+    <!-- Model selection input field -->
+    <div id="user-input-container">
+        <textarea id="user-input" placeholder="Enter message..." rows="1" oninput="adjustHeight(this)" onkeydown="handleEnter(event)"></textarea>
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <script>
+        let context = ""; 
+        let aiMessageElem = null;
+        let currentAiMarkdown = "";
+
+        // Retrieve the saved model name
+        function getModelName() {
+            const cookie = document.cookie.split('; ').find(row => row.startsWith('model='));
+            return cookie ? cookie.split('=')[1] : 'llama3.1:8b'; // Default model
+        }
+
+        // Save model name
+        function setModelName() {
+            const modelInput = document.getElementById("model-input").value.trim();
+            if (modelInput) {
+                // Set cookie
+                document.cookie = `model=${modelInput}; path=/; max-age=${2000 * 24 * 60 * 60}`;
+            }
+        }
+
+        // Adjust input field height, maximum 3 lines
+        function adjustHeight(element) {
+            element.style.height = "auto";
+            element.style.height = (element.scrollHeight > 60 ? 60 : element.scrollHeight) + "px";
+        }
+
+        function appendMessage(sender, message, rawMarkdown = "") {
+            let chatBox = document.getElementById("chat-box");
+            let messageElem = document.createElement("div");
+            messageElem.classList.add("message", sender === "user" ? "user-message" : "ai-message");
+
+            messageElem.innerHTML = marked.parse(message);
+
+            if (sender === "ai") {
+                addCopyButton(messageElem, rawMarkdown || message);
+                addCodeCopyButtons(messageElem);
+            }
+
+            chatBox.appendChild(messageElem);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function addCopyButton(element, rawMarkdown) {
+            const copyButton = document.createElement("button");
+            copyButton.textContent = "Copy";
+            copyButton.onclick = () => {
+                navigator.clipboard.writeText(rawMarkdown).then(() => {
+                    copyButton.textContent = "Copied";
+                    setTimeout(() => copyButton.textContent = "Copy", 2000);
+                });
+            };
+            element.appendChild(copyButton);
+        }
+
+        function addCodeCopyButtons(element) {
+            const codeBlocks = element.querySelectorAll("pre code");
+
+            codeBlocks.forEach(codeBlock => {
+                const codeCopyButton = document.createElement("button");
+                codeCopyButton.textContent = "Copy Code";
+                codeCopyButton.onclick = () => {
+                    navigator.clipboard.writeText(codeBlock.innerText).then(() => {
+                        codeCopyButton.textContent = "Copied";
+                        setTimeout(() => codeCopyButton.textContent = "Copy Code", 2000);
+                    });
+                };
+
+                const pre = codeBlock.parentElement;
+                pre.style.position = "relative";
+
+                codeCopyButton.style.position = "absolute";
+                codeCopyButton.style.top = "5px";
+                codeCopyButton.style.right = "5px";
+
+                pre.appendChild(codeCopyButton);
+            });
+        }
+
+        function showWelcomeMessage() {
+            appendMessage("ai", "Welcome to Llama Chat!");
+        }
+
+        function showLoading() {
+            aiMessageElem = document.createElement("div");
+            aiMessageElem.classList.add("message", "ai-message");
+            aiMessageElem.innerHTML = "Waiting for AI response...";
+            document.getElementById("chat-box").appendChild(aiMessageElem);
+        }
+
+        async function sendMessage() {
+            let userInput = document.getElementById("user-input");
+            let message = userInput.value.trim();
+            if (!message) return;
+
+            appendMessage("user", message, message);
+            userInput.value = "";
+            context =context+"\n\n[user]:"+message;
+            showLoading();
+
+            const modelName = getModelName(); // Get selected model name
+
+            try {
+                await fetchStream("http://localhost:11434/api/generate", modelName,context+"/n/nyou are now the assistance,write the next respond");
+                 context=context+"\n\n[Assistance]:"+currentAiMarkdown
+            } catch (error) {
+                console.error("Error:", error);
+                appendMessage("ai", "Error communicating with AI.");
+            }
+        }
+
+        // Send message when Enter key is pressed
+        function handleEnter(event) {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();  // Prevent line break
+                sendMessage();
+            }
+        }
+
+        async function fetchStream(url, model, prompt) {
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ model, prompt })
+                });
+
+                if (!response.ok) throw new Error("Network response not okay: " + response.statusText);
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let done, value;
+                let partialMessage = "";
+
+                while (!done) {
+                    ({ value, done } = await reader.read());
+                    const text = decoder.decode(value, { stream: true });
+                    const lines = text.split("\n");
+
+                    for (const line of lines) {
+                        if (line) {
+                            try {
+                                const message = JSON.parse(line);
+                                partialMessage += message.response || "";
+
+                                if (aiMessageElem) {
+				    currentAiMarkdown = partialMessage; 
+                                    aiMessageElem.innerHTML = marked.parse(partialMessage);
+                                    addCopyButton(aiMessageElem, partialMessage);
+                                    addCodeCopyButtons(aiMessageElem,partialMessage);
+                                }
+
+                                if (message.done) return;
+                            } catch (error) {
+                                console.error("Parsing error:", error);
+                            }
+                        }
+                    }
+                }
+
+            } catch (error) {
+                console.error("Request error:", error);
+                throw new Error("AI request failed: " + error.message);
+            }
+        }
+
+        // On page load, retrieve the model name from the cookie and display it in the input field
+        window.onload = function () {
+            const modelName = getModelName();
+            document.getElementById("model-input").value = modelName;  // Set default value of input field to the retrieved model name
+            showWelcomeMessage();
+        }
+    </script>
+</body>
+</html>
