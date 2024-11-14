@@ -37,4 +37,4 @@ pip install flask
 Simply run `app.py`, and then open your browser and navigate to `http://127.0.0.1:5000/`. Enter the name of the downloaded model in the model input box to start using it.
 
 ## Feedback and Support
-This is a high school student's first GitHub project. If you encounter any issues, feel free to contact me. Thank you for your support 😄🎉
+This is a high school student's first GitHub project. If you found this project useful or interesting, please consider giving it a star! If you encounter any issues, feel free to contact me. Thank you for your support 😄🎉
